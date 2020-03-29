@@ -4,7 +4,6 @@ import numpy as np
 import pyqtgraph as pg
 import os
 Path=os.path.dirname((os.path.abspath(__file__)))
-print(Path)
 
 def colorset(N,Cmap='default'):
     """return color map for a given color scheme Cmap with the number of elements N

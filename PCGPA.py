@@ -1,18 +1,14 @@
 """PCGPA
+the code is based on the following papers
 J. Opt. Soc. Am. B 25, A120-A132 (2008)
 Opt. Express 27, 2112-2124 (2019)
 """
 
 #from the file directory find the first folder containing the name python and append it
 import os
-Path=os.path.abspath(__file__)
-SP=Path.split("\\")
-i=0
-while i<len(SP) and SP[i].find('python')<0:
-    i+=1
 import sys
-Pypath='\\'.join(SP[:i+1])
-sys.path.append(Pypath)
+Path=os.path.dirname((os.path.abspath(__file__)))
+sys.path.append(Path)
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -29,17 +25,11 @@ from multiprocessing import Pool, cpu_count
 from scipy import interpolate
 
 
-def PCGPA_FROG(frog,Type='SHG'):
-    if Type=='SHG':
-        gate=frog
-    return gate
-
 def PCGPA_ComM(OO):
     """colomn manipulation for time product
     from [0,-1,-2,-3,-4,3,2,1] to [-4,-3,-2,-1,0,1,2,3] or similar for larger arrays
     """
     OO1=np.roll(OO,-1,axis=0)
-    #OO1=OO
     OO2=np.concatenate((OO1[int(len(OO1)/2)-1::-1,:],OO1[:int(len(OO1)/2)-1:-1,:]), axis=0)
     return OO2
 
@@ -466,7 +456,9 @@ def parallel_IG(p,T,W,frog,SpecFund,keep_fundspec=False,max_population=12,NStep=
     Out1=Out1[ind]
     
     #second step with Nbin/2 multigrid
-    In2=Out1[:int(len(Out1)/2)]
+    In2=Out1[:int(len(Out1)/2)] #take best results from the first step
+    for i in range(len(In2)):
+        (In2[i][1],In2[i][2])=shift2zerodelay(In2[i][1],In2[i][2])
     (T2,W2,frog2)=multigrig_resize(T,W,frog,2) #resize the FROG
     F2=interpolate.PchipInterpolator(W/2,SpecFund)
     Sf2=F2(W2/2)
@@ -515,157 +507,6 @@ def PCGPA_reconstruct_IG(T,W,frog,Steps,SpecFund,keep_fundspec,pulse):
             pulseW=np.sqrt(Sf)*np.exp(1j*np.angle(fftshift(fft(fftshift(pulse)))))
             pulse=ifftshift(ifft(ifftshift(pulseW)))
             gate=np.copy(pulse)
-            
-    #output spectrum
-    #pulse_w=fftshift(fft(fftshift(pulse)))
+
     return (G,pulse,gate)
     
-    
-    
-    
-#test
-   
-     
-#File='D:\\my_python\\FROG\\test1.txt'
-#(T,W,frog)=load_frog(File)
-#print(TBP_frog(T,W,frog))
-##print(T[np.sum(frog,axis=1).argmax()])
-#plt.pcolormesh(np.transpose(frog))
-#plt.show()
-#(T1,W1,frog1)=resize_frog(T,W,frog,TBP_frog(T,W,frog)*1.3)
-#frog1=frog1/np.max(frog1) #normalization
-#plt.pcolormesh(np.transpose(frog1))
-#plt.show()
-#
-#Sf=spectrum_fromSHG(T1,W1,frog1)
-#dw=W1[1]-W1[0]
-#W1f=W1[int(len(W1)/2)]/2+dw*np.array([i-int(len(W1)/2) for i in range(len(W1))])
-##plt.plot(W1f,Sf)
-##plt.show()
-#print(np.sum(frog1,axis=1).argmax())
-    
-
-
-
-#GPA test
-#phase=np.random.random(len(Sf))*2*Pi*1
-#pulse=np.sqrt(Sf)*np.exp(1j*phase) #in spectral domain
-#gate=np.copy(pulse)
-#pulse_t=ifftshift(ifft(ifftshift(pulse))) #convet to to time domain
-#gate_t=np.copy(pulse_t)
-##plt.plot(np.abs(pulse_t))
-##plt.plot(np.abs(gate_t))
-##plt.show()
-#print(np.abs(pulse_t).argmax())
-#
-#(pulse1,gate1,G1,frog_out)=PCGPA_step(pulse_t,gate_t,frog1)
-#print(G1,'  ',np.abs(pulse1).argmax())
-#plt.plot(T1,np.abs(pulse1))
-#plt.plot(T1,np.abs(gate1))
-#plt.show()
-#plt.plot(T1,np.angle(pulse1))
-#plt.show()
-#
-#
-#for i in range(5):
-#    (pulse1,gate1,G1,frog_out)=PCGPA_step(pulse1,gate1,frog1)
-#    print(G1,'  ',np.abs(pulse1).argmax())
-#    plt.plot(T1,np.abs(pulse1))
-#    plt.plot(T1,np.abs(gate1))
-#    plt.show()
-#    plt.plot(T1,np.angle(pulse1))
-#    plt.show()
-#
-#pulse_w=fftshift(fft(fftshift(pulse1)))
-#plt.plot(np.abs(pulse_w))
-#plt.show()
-#plt.plot(np.angle(pulse_w))
-#plt.show()
-
-
-#(pulse_w,pulse_t,frog_out,G)=PCGPA_reconstruct_SHG(T1,W1,frog1,MaxStep=30,keep_fundspec=True,SpecFund=Sf)
-#print(G)
-#plt.plot(W1f,np.abs(pulse_w))
-#plt.show()
-#plt.plot(W1f,np.angle(pulse_w))
-#plt.show()
-#
-#plt.plot(T1,np.abs(pulse_t))
-#plt.show()
-
-
-
-#
-##test load_frog
-#File1="D:\\OSU\\experiments\\exp data\\2019.11.29\\broadening\\6\\3+2+4 mm yag 63 61 17.1.h5SpecScan"
-##File1='D:\\OSU\\experiments\\exp data\\2019.11.18 booster\\frog\\72 64 10.1.akSpecScantransformed'
-#(T,W,frog)=load_frog(File1)
-##print(T[np.sum(frog,axis=1).argmax()])
-##print(W)
-##print(T)
-#plt.pcolormesh(np.transpose(frog))
-#plt.show()
-#plt.plot(W,frog[int(len(frog)/2)])
-#plt.show()
-#(T1,W1,frog1)=resize_frog(T,W,frog,TBP_frog(T,W,frog)*1.3*2)
-#plt.pcolormesh(np.transpose(frog1))
-#plt.show()
-##(T2,W2,frog2)=multigrig_resize(T1,W1,frog1,4)
-##plt.pcolormesh(np.transpose(frog2))
-##plt.show()
-##
-#
-##O=parallel_IG(None,T1,W1,frog1,spectrum_fromSHG(T1,W1,frog1),NStep=3,parallel=False)
-
-
-#if __name__ == '__main__':
-#    Ncpu=cpu_count()
-#    if Ncpu > 2:
-#        Npr=Ncpu-2 #number of parallel processes in the Pool
-#    else:
-#        Npr=1
-#    p=Pool(Npr)
-#    print(1)
-#    O=parallel_IG(p,T1,W1,frog1,spectrum_fromSHG(T1,W1,frog1),NStep=3)
-#    #print(O[:,0])
-#    #print(np.array(list(p.imap(one,[i for i in range(6)]))))
-#    print(2)
-#    p.close()
-#    p.join()
-    
-#    In2=O[0][1]
-#    (T2,W2,frog2)=multigrig_resize(T1,W1,frog1,2) #resize the FROG
-#    F2=interpolate.PchipInterpolator(W1/2,spectrum_fromSHG(T1,W1,frog1))
-#    Sf2=F2(W2/2)
-#    F_pulse=interpolate.PchipInterpolator(multigrig_resize(T1,W1,frog1,4)[0],In2)
-#    Pulse=F_pulse(T2)
-#    ind0=np.logical_or(T2<T1[0],T2>T1[-1])
-#    Pulse[ind0]=0
-#
-#    Out=PCGPA_reconstruct_IG(T2,W2,frog2,3,Sf2,False,Pulse)
-#    print(Out[0])
-
-
-#File1='D:\\OSU\\experiments\\exp data\\2019.08.20\\f50 no broaden 3.6um.akSpecScantransformed.frg'
-#(T,W,frog)=load_frog(File1)
-##print(T[np.sum(frog,axis=1).argmax()])
-#plt.pcolormesh(np.transpose(frog))
-#plt.show()
-    
-#File1='D:\\my_python\\FROG\\testKent'
-#(T,W,frog)=load_frog(File1)
-##print(T[np.sum(frog,axis=1).argmax()])
-#plt.pcolormesh(np.transpose(frog))
-#plt.show()
-
-#import h5py
-#File1='D:\\OSU\\experiments\\exp data\\2019.08.20\\f50 no broaden 3.6um.akSpecScan'
-#f = h5py.File(File1,'r')
-#data = f.get('data/variable1')
-#print(data)
-
-
-#from mat4py import loadmat
-#
-#File1='D:\\OSU\\experiments\\exp data\\2019.08.20\\f50 no broaden 3.6um.akSpecScan'
-#A=loadmat(File1)

@@ -1,14 +1,8 @@
 import os
 import numpy as np
-#from the file directory find the first folder containing the name python and append it
-Path=os.path.abspath(__file__)
-SP=Path.split("\\")
-i=0
-while i<len(SP) and SP[i].find('python')<0:
-    i+=1
 import sys
-Pypath='\\'.join(SP[:i+1])
-sys.path.append(Pypath)
+Path=os.path.dirname((os.path.abspath(__file__)))
+sys.path.append(Path)
 Pi=np.pi
 from constants import c
 import classes.error_class as ER
@@ -39,11 +33,20 @@ def imp_spec(FP,xcal='nm',normalize=True,axis=(0,1)):
             ind0=Sp < np.zeros(Sp.shape)
             Sp[ind0]=0
         elif FP[-3:] == 'txt' or FP[-3:] == 'dat': #standard case with a pure 2 colomn data
-            L=np.fromstring(open(FP,'r').readline(),sep='\t')
-            if len(L) == 2:
-                Sp=np.loadtxt(FP)
-            else:
-                raise ER.SL_exception('unknown fundamental spectrum file format')
+            if open(FP,'r').readline() == 'Wavelength\tIntensity\n':
+                """file saved by a Wavescan (two column)"""
+                Sp=np.loadtxt(FP,skiprows=1)
+            else: 
+                L=np.fromstring(open(FP,'r').readline(),sep='\t')
+                if len(L) == 2:
+                    Sp=np.loadtxt(FP)
+                else:
+                    raise ER.SL_exception('unknown fundamental spectrum file format')
+        elif FP[-11:] == 'IntSpectrum':
+            """load Sfrogger spectrum"""
+            axis=(0,1)
+            Sp=np.loadtxt(FP,skiprows=1)
+            xcal='PHz'            
         else:
             raise ER.SL_exception('unknown fundamental spectrum file format')
     except OSError as er:
@@ -54,6 +57,8 @@ def imp_spec(FP,xcal='nm',normalize=True,axis=(0,1)):
             Sp1=Sp1[::-1]
         elif xcal=='THz':
             Sp1=np.array([[2*Pi*s[axis[0]]*10**12,np.sqrt(np.abs(s[axis[1]]))] for s in Sp])
+        elif xcal=='PHz':
+            Sp1=np.array([[2*Pi*s[axis[0]]*10**15,np.sqrt(np.abs(s[axis[1]]))] for s in Sp])
         else:
             print("unknown x calibration")
             raise ER.CalibrationError(FP)
@@ -63,7 +68,13 @@ def imp_phase(FP,xcal='nm',normalize=True,axis=(0,1)):
     """importing spectrum, calibrating to angular frequency (if input is in nm)
     return field"""
     try:
-        Sp=np.loadtxt(FP)
+        if FP[-10:] == 'PhSpectrum':
+            """load Sfrogger phase"""
+            axis=(0,1)
+            Sp=np.loadtxt(FP,skiprows=1)
+            xcal='PHz'
+        else:
+            Sp=np.loadtxt(FP)
     except OSError as er:
         raise ER.ReadError(er)
     else:
@@ -72,6 +83,8 @@ def imp_phase(FP,xcal='nm',normalize=True,axis=(0,1)):
             Sp1=Sp1[::-1]
         elif xcal=='THz':
             Sp1=np.array([[2*Pi*s[axis[0]]*10**12,s[axis[1]]] for s in Sp])
+        elif xcal=='PHz':
+            Sp1=np.array([[2*Pi*s[axis[0]]*10**15,s[axis[1]]] for s in Sp])
         else:
             print("unknown x calibration")
         return Sp1
