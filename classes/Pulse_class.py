@@ -187,7 +187,7 @@ def width(X,Y,method='FWHM'):
             
             if N1-1 > 0:
                 if Y[N1-1] == M/2:
-                    X1=X[N1]
+                    X1=X[N1-1]
                 else:
                     y1=Y[N1-1]
                     y2=Y[N1]
@@ -201,7 +201,7 @@ def width(X,Y,method='FWHM'):
                 if Y[i] > M/2: N2=i
             if N2+1 < len(Y)-1:
                 if Y[N2+1] == M/2:
-                    X2=X[N2]
+                    X2=X[N2+1]
                 else:
                     y1=Y[N2]
                     y2=Y[N2+1]
