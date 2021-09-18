@@ -25,5 +25,3 @@ fundamental spectrum can also have multiple formats (but they are also specific 
 a generic spectrum data file format that is accepted by the program should have .txt or .dat extension, 
 and the two-column structure with the first column being wavelength in nm and the second column being intensity
 
-Do not use 'parallel' optional box if you are not sure that you really need it (it runs multigrid algorithm using multiprocessing). 
-Python, after one of updates in 2020, started automatically parallelizing map() function; thus, 'parallel' options seems to be unnecessary any more
