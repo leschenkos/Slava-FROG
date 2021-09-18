@@ -4,7 +4,7 @@ import sys
 Path=os.path.dirname((os.path.abspath(__file__)))
 sys.path.append(Path)
 Pi=np.pi
-from constants import c
+from myconstants import c
 import classes.error_class as ER
 from scipy import ndimage
 

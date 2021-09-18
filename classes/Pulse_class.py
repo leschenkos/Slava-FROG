@@ -2,7 +2,7 @@
 
 from load_files.load_folder import imp_spec, imp_phase
 import numpy as np
-from constants import c
+from myconstants import c
 Pi=np.pi
 from scipy import interpolate
 from scipy.fftpack import fft, ifft, fftshift, ifftshift
@@ -176,46 +176,79 @@ def width(X,Y,method='FWHM'):
     """computed the width (for example pulse duration of spectrum width) of a data set.
     data are expected to be 1d np.array"""
     if len(Y)>0:
+        M=Y.max()
         if method=='FWHM':
             """in case of mutiple peaks, the maximum width will be returned"""
-            M=Y.max()
-            NM=Y.argmax()
-            N1=NM
-            N2=NM
-            for i in range(NM-1,-1,-1):
-                if Y[i] > M/2: N1=i
+            # NM=Y.argmax()
+            # N1=NM
+            # N2=NM
+            # for i in range(NM-1,-1,-1):
+            #     if Y[i] > M/2: N1=i
+            # for i in range(NM+1,len(Y)):
+            #     if Y[i] > M/2: N2=i
+            level=0.5
+            ind=Y > M*level
+            indx=np.where(ind == True)
+            N1=indx[0][0]
+            N2=indx[0][-1]
+            # print(X[N1],X[N2])
+            # print(Y[N1]/M,Y[N2]/M)
+            # print(Y[N1-1]/M,Y[N2+1]/M)
             
+        elif method == 'e**-2':
+            level=np.exp(-2)
+            ind=Y > level*M
+            indx=np.where(ind == True)
+            N1=indx[0][0]
+            N2=indx[0][-1]
+            # print(X[N1],X[N2])
+        elif method == 'e**-1':
+            level=np.exp(-1)
+            ind=Y > level*M
+            indx=np.where(ind == True)
+            N1=indx[0][0]
+            N2=indx[0][-1]
+            # print(X[N1],X[N2])
+            
+        elif method == '4sigma':
+            Xmean=np.sum(X*Y)/np.sum(Y)
+            sigmaX=(np.sum((X-Xmean)**2*Y)/np.sum(Y))**0.5
+            Width=4*sigmaX
+        else:
+            raise ER.SL_exception('unknown method')
+        
+        if method == '4sigma':
+            return Width
+        else:
             if N1-1 > 0:
-                if Y[N1-1] == M/2:
+                if Y[N1-1] == M*level:
                     X1=X[N1-1]
                 else:
                     y1=Y[N1-1]
                     y2=Y[N1]
                     x1=X[N1-1]
                     x2=X[N1]
-                    X1=x1+(M/2-y1)/(y2-y1)*(x2-x1) #linear interpolation for accuracy improvement
+                    # print(y1)
+                    # print((M*level-y1)/(y2-y1))
+                    X1=x1+(M*level-y1)/(y2-y1)*(x2-x1) #linear interpolation for accuracy improvement
             else:
                 X1=X[0]
                 
-            for i in range(NM+1,len(Y)):
-                if Y[i] > M/2: N2=i
+            
             if N2+1 < len(Y)-1:
-                if Y[N2+1] == M/2:
+                if Y[N2+1] == M*level:
                     X2=X[N2+1]
                 else:
                     y1=Y[N2]
                     y2=Y[N2+1]
                     x1=X[N2]
                     x2=X[N2+1]
-                    X2=x1+(M/2-y1)/(y2-y1)*(x2-x1) #linear interpolation for accuracy improvement
+                    X2=x1+(M*level-y1)/(y2-y1)*(x2-x1) #linear interpolation for accuracy improvement
             else:
                 X2=X[-1]
              
             Width=np.abs(X2-X1)
             return Width
-        else:
-            raise ER.SL_exception('unknown method')
+        
     else:
         raise ER.SL_exception('no data for width calculation')
-
-#print(width(np.array([0,1,2,3,4,5,6]),np.array([0.1,0,0.2,1,0.9,0,0]),method='FWHM'))

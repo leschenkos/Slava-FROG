@@ -1,6 +1,7 @@
 """PCGPA
 the code is based on the following papers
 J. Opt. Soc. Am. B 25, A120-A132 (2008)
+Opt. Express 26, 2643-2649 (2018)
 Opt. Express 27, 2112-2124 (2019)
 """
 
@@ -13,14 +14,13 @@ sys.path.append(Path)
 import numpy as np
 import matplotlib.pyplot as plt
 Pi=np.pi
-from constants import c, e0
+from myconstants import c, e0
 from scipy.fftpack import fft, ifft, fftshift, ifftshift
 import classes.error_class as ER
 from scipy import interpolate
 import scipy.io
-from constants import c
 from classes.Pulse_class import remove_phase_jumps
-import h5py
+# import h5py
 from multiprocessing import Pool, cpu_count
 from scipy import interpolate
 
@@ -30,16 +30,17 @@ def PCGPA_ComM(OO):
     from [0,-1,-2,-3,-4,3,2,1] to [-4,-3,-2,-1,0,1,2,3] or similar for larger arrays
     """
     OO1=np.roll(OO,-1,axis=0)
+    #OO1=OO
     OO2=np.concatenate((OO1[int(len(OO1)/2)-1::-1,:],OO1[:int(len(OO1)/2)-1:-1,:]), axis=0)
     return OO2
 
-def PCGPA_step(pulse_t,gate_t,frog,samepulseandgate=True):
+def PCGPA_step(pulse_t,gate_t,frog,samepulseandgate=True,Type='SHG-FROG'):
     """frog is supposed to be oriented by delay, that means that each raw (frog[i]) 
     corresponds to a fixed dealy
     it is also assumed that frog has square dimentions propotinal to a power of 2 (2**N)
     pulse and gate are in temporal domain
     """
-
+    
     OO=pulse_t[:,None]*gate_t #outer product
     OOshift=PCGPA_ComM(np.transpose(np.array([np.roll(OO[i],-i) for i in range(len(OO))])))
     frog_sim=np.array([fftshift(fft(fftshift(OOshift[i]))) for i in range(len(OOshift))])
@@ -54,7 +55,10 @@ def PCGPA_step(pulse_t,gate_t,frog,samepulseandgate=True):
     
     if samepulseandgate:
         """in case of autocorrelation FROG such as SHG-FROG (but not X-FROG)"""
-        gate_new=pulse_new
+        if Type=='SHG-FROG':
+            gate_new=pulse_new
+        elif Type=='TG-FROG':
+            gate_new=np.abs(pulse_new)**2
         #calculate new proper frog_sim
         OOnew=pulse_new[:,None]*gate_new
         OOshift=PCGPA_ComM(np.transpose(np.array([np.roll(OOnew[i],-i) for i in range(len(OOnew))])))
@@ -100,7 +104,7 @@ def remove_linear_phase(pulse,gate):
     
     X=np.arange(It0,It1)
     Y=Phase[It0:It1]
-    slope=np.polyfit(X,Y,1)[0]
+    slope=np.polyfit(X,Y,1)[0] #!!! sometimes returns expected non-empty vector for x
     
     ind=np.arange(len(pulse))
     pulseout=np.abs(pulse)*np.exp(1j*(np.angle(pulse)-ind*slope))
@@ -108,9 +112,9 @@ def remove_linear_phase(pulse,gate):
     
     return (pulseout,gateout)
 
-def spectrum_fromSHG(T,W2,frog):
+def spectrum_fromFROG(T,W2,frog,Type='SHG-FROG'):
     """frog is supposed to be oriented by delay, that means that each raw (frog[i]) 
-    corresponds to a fixed dealy
+    corresponds to a fixed delay
     it is also assumed that frog has square dimentions propotinal to a power of 2 (2**N)"""
     
     SHG_w=np.sum(frog,axis=0) #get the integrated over delay SHG spectrum from the frog trace
@@ -120,7 +124,10 @@ def spectrum_fromSHG(T,W2,frog):
     SHG_abs=np.sqrt(np.abs(SHG_t))
     SHG_phase=remove_discontinuity(np.angle(SHG_t),Pi/2)/2
     dw=W2[1]-W2[0]
-    W1=W2[int(len(W2)/2)]/2+dw*np.array([i-int(len(W2)/2) for i in range(len(W2))]) #fundamental frequency range (good for recostraction)
+    if Type=='SHG-FROG':
+        W1=W2[int(len(W2)/2)]/2+dw*np.array([i-int(len(W2)/2) for i in range(len(W2))]) #fundamental frequency range (good for recostraction)
+    elif Type=='TG-FROG':
+        W1=W2
     S=np.abs(fft_fixed(T1,W1,SHG_abs*np.exp(1j*SHG_phase)))
     return S
 
@@ -157,7 +164,7 @@ def remove_discontinuity(array,step_limit,nown_jump=True,jump_value=2*Pi):
 def load_frog(file):
     """loads a FROG scan"""
     
-    if file[-3:]=='txt':
+    if file[-3:]=='txt' or file[-3:]=='dat':
         """for program generated frogs (basically for test purposes)"""
         try:
             T0=open(file,'r').readline()
@@ -169,23 +176,6 @@ def load_frog(file):
             W=2*Pi*c/Sp[0]*10**9*10**-15
             frog=Sp[1:]
             frog=frog/frog.max()
-            return (T, W, frog)
-        
-    elif file[-10:]=='h5SpecScan':
-        """for files saved by akvlXFROG soft"""
-        try:
-            data=h5py.File(file, 'r')
-        except OSError as er:
-            raise ER.ReadError(er)
-        else:
-            T=data['delays'][:]
-            L=data['wavelengths'][:]
-            W=2*Pi*c/L*10**9*10**-15
-            frog=data['trace'][:]
-            frog=frog/frog.max()
-            ind=W.argsort()
-            W=W[ind]
-            frog=frog[:,ind]
             return (T, W, frog)
            
     elif file[-21:]=='akSpecScantransformed':
@@ -258,9 +248,14 @@ def load_frog(file):
             W=W0+dw*2*Pi*np.array([i-Nbin/2 for i in range(Nbin)])
             
             return (T, W, frog)
+    elif file[-9:]=='frgav.npy':
+        """for averaged frog traces"""
+        In=np.load(file)
+        W=In[0,1:]
+        T=In[1:,0]
+        frog=In[1:,1:]
+        return (T, W, frog)
     else:
-        """for files saved by KENT_FROG labview soft or its modifications
-         (if the data are saved in the same way)"""
         raise ER.SL_exception('unknown file format')
 
 def preprocess_frog(T,W,frog,Lmax=None,background=0):
@@ -296,6 +291,7 @@ def resize_frog(T,W,frog,Nbin,Nmax):
     It1=len(Int_t)
     while np.sum(Int_t[It1:]) < Et*E_part : It1 -= 1
     dt0=(T[It0]-T[It1])/Nbin
+#    print(It0,It1)
     
     Ew=np.sum(Int_w)
     Iw0=1
@@ -303,6 +299,7 @@ def resize_frog(T,W,frog,Nbin,Nmax):
     Iw1=len(Int_w)
     while np.sum(Int_w[Iw1:]) < Ew*E_part : Iw1 -= 1
     dw0=(W[Iw0]-W[Iw1])/Nbin
+#    print(Iw0,Iw1)
     
     Nbin0=2*Pi/dt0/dw0
     if np.log2(Nbin0)%1:
@@ -378,6 +375,7 @@ def TBP_frog(T,W,frog):
     It1=len(Int_t)
     while np.sum(Int_t[It1:]) < Et*E_part : It1 -= 1
     T0=(T[It0]-T[It1])
+    #print(T0)
     
     Ew=np.sum(Int_w)
     Iw0=1
@@ -389,14 +387,15 @@ def TBP_frog(T,W,frog):
     return T0*W0
 
 
-def PCGPA_reconstruct_SHG(T,W,frog,G_goal=10**-3,MaxStep=50,SpecFund=[],keep_fundspec=False,MuliGrid=False):
+def PCGPA_reconstruct_SHG(T,W,frog,G_goal=10**-3,MaxStep=50,SpecFund=[],
+                          keep_fundspec=False,MuliGrid=False,Type='SHG-FROG'):
     """PCGPA reconstraction function for SHG-FROG
     MuliGrid: use or not the multi-grid acceleration
     """
     #prepare starting parameters
     if len(SpecFund)==0:
         #retrieve fundamental spectrum
-        Sf=spectrum_fromSHG(T,W,frog)
+        Sf=spectrum_fromFROG(T,W,frog,Type)
     else:
         Sf=SpecFund
         
@@ -406,7 +405,10 @@ def PCGPA_reconstruct_SHG(T,W,frog,G_goal=10**-3,MaxStep=50,SpecFund=[],keep_fun
         phase=np.random.random(len(Sf))*2*Pi*1 #start from random phase
         pulse_w=np.sqrt(Sf)*np.exp(1j*phase) #in spectral domain
         pulse=ifftshift(ifft(ifftshift(pulse_w))) #convet to time domain
-        gate=np.copy(pulse)
+        if Type=='SHG-FROG':
+            gate=np.copy(pulse)
+        elif Type=='TG-FROG':
+            gate=np.abs(np.copy(pulse))**2
     
     Step=0
     G=1
@@ -414,12 +416,15 @@ def PCGPA_reconstruct_SHG(T,W,frog,G_goal=10**-3,MaxStep=50,SpecFund=[],keep_fun
     
     #reconstraction
     while(G > G_goal and Step < MaxStep):
-        (pulse,gate,G,frog_out)=PCGPA_step(pulse,gate,frog)
+        (pulse,gate,G,frog_out)=PCGPA_step(pulse,gate,frog,Type=Type)
         Step+=1
         if keep_fundspec:
             pulseW=np.sqrt(Sf)*np.exp(1j*np.angle(fftshift(fft(fftshift(pulse)))))
             pulse=ifftshift(ifft(ifftshift(pulseW)))
-            gate=np.copy(pulse)
+            if Type=='SHG-FROG':
+                gate=np.copy(pulse)
+            elif Type=='TG-FROG':
+                gate=np.abs(np.copy(pulse))**2
             
     #output spectrum
     pulse_w=fftshift(fft(fftshift(pulse)))
@@ -428,7 +433,8 @@ def PCGPA_reconstruct_SHG(T,W,frog,G_goal=10**-3,MaxStep=50,SpecFund=[],keep_fun
 def one(a):
     return a
 
-def parallel_IG(p,T,W,frog,SpecFund,keep_fundspec=False,max_population=12,NStep=25,parallel=True):
+def parallel_IG(p,T,W,frog,SpecFund,keep_fundspec=False,max_population=12,NStep=25,parallel=True,
+                Type='SHG-FROG'):
     """uses the idea from Opt. Express 27, 2112-2124 (2019)
     starts from a number of initial guesses (IG) and returns the best one
     uses the multi-grid approach
@@ -447,11 +453,12 @@ def parallel_IG(p,T,W,frog,SpecFund,keep_fundspec=False,max_population=12,NStep=
     Sf1=F1(W1/2)
     if parallel:
         Out1=np.array(p.starmap(PCGPA_reconstruct_IG,
-                            [[T1,W1,frog1,NStep,Sf1,keep_fundspec,[]] for i in range(population)]))
+                            [[T1,W1,frog1,NStep,Sf1,keep_fundspec,Type,[]] for i in range(population)]))
     else:
         Out1=np.array(list(map(PCGPA_reconstruct_IG,
                             [T1]*population,[W1]*population,[frog1]*population,
-                            [NStep]*population,[Sf1]*population,[keep_fundspec]*population,[[]]*population)))
+                            [NStep]*population,[Sf1]*population,
+                            [keep_fundspec]*population,[Type]*population,[[]]*population)))
     ind=Out1[:,0].argsort()
     Out1=Out1[ind]
     
@@ -468,12 +475,13 @@ def parallel_IG(p,T,W,frog,SpecFund,keep_fundspec=False,max_population=12,NStep=
     Pulse[:,ind0]=0
     if parallel:
         Out2=np.array(p.starmap(PCGPA_reconstruct_IG,
-                            [[T2,W2,frog2,NStep,Sf2,keep_fundspec,Pulse[i]] 
+                            [[T2,W2,frog2,NStep,Sf2,keep_fundspec,Type,Pulse[i]] 
                             for i in range(len(Pulse))]))
     else:
         Out2=np.array(list(map(PCGPA_reconstruct_IG,
                             [T2]*len(Pulse),[W2]*len(Pulse),[frog2]*len(Pulse),[NStep]*len(Pulse),
-                            [Sf2]*len(Pulse),[keep_fundspec]*len(Pulse),Pulse)))
+                            [Sf2]*len(Pulse),[keep_fundspec]*len(Pulse),[Type]*len(Pulse),
+                            Pulse)))
     ind=Out2[:,0].argsort()
     Out2=Out2[ind]
     #fit to the full original time window
@@ -484,15 +492,17 @@ def parallel_IG(p,T,W,frog,SpecFund,keep_fundspec=False,max_population=12,NStep=
     pulse[ind0]=0
     return pulse
     
-def PCGPA_reconstruct_IG(T,W,frog,Steps,SpecFund,keep_fundspec,pulse):
+def PCGPA_reconstruct_IG(T,W,frog,Steps,SpecFund,keep_fundspec,Type,pulse):
     """calculates one initial guess for the multi-grid algorithm"""
-    
+    Sf=SpecFund
     if len(pulse) < 2:
-        Sf=SpecFund
         phase=np.random.random(len(Sf))*2*Pi*1 #start from random phase
         pulse_w=np.sqrt(Sf)*np.exp(1j*phase) #in spectral domain
         pulse=ifftshift(ifft(ifftshift(pulse_w))) #convet to time domain
-        gate=np.copy(pulse)
+        if Type=='SHG-FROG':
+            gate=np.copy(pulse)
+        elif Type=='TG-FROG':
+            gate=np.abs(np.copy(pulse))**2
     else:
         gate=np.copy(pulse)
     Step=0
@@ -501,12 +511,15 @@ def PCGPA_reconstruct_IG(T,W,frog,Steps,SpecFund,keep_fundspec,pulse):
     
     #reconstraction
     while(Step < Steps):
-        (pulse,gate,G,frog_out)=PCGPA_step(pulse,gate,frog)
+        (pulse,gate,G,frog_out)=PCGPA_step(pulse,gate,frog,Type=Type)
         Step+=1
         if keep_fundspec:
             pulseW=np.sqrt(Sf)*np.exp(1j*np.angle(fftshift(fft(fftshift(pulse)))))
             pulse=ifftshift(ifft(ifftshift(pulseW)))
-            gate=np.copy(pulse)
+            if Type=='SHG-FROG':
+                gate=np.copy(pulse)
+            elif Type=='TG-FROG':
+                gate=np.abs(np.abs(np.copy(pulse)))**2
 
     return (G,pulse,gate)
     
