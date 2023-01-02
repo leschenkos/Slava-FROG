@@ -4,6 +4,7 @@ import numpy as np
 import pyqtgraph as pg
 import os
 Path=os.path.dirname((os.path.abspath(__file__)))
+from matplotlib.colors import ListedColormap
 
 def colorset(N,Cmap='default'):
     """return color map for a given color scheme Cmap with the number of elements N
@@ -34,6 +35,16 @@ def ImageColorMap(Cmap,grade):
     Val=np.linspace(0,1,len(Colors))
     CM=pg.ColorMap(Val,Colors)
     
-    return CM.getLookupTable(0.0, 1.0, grade)
+    #return CM.getLookupTable(0.0, 1.0, grade)
+    return CM
+
+def plt_cmap(Cmap='Wh_rainbow'):
+    if Cmap=='Wh_rainbow':
+        file=Path+'/Wh_rainbow.dat'
+        Cset0=np.loadtxt(file)
+    if Cmap=='black':
+        file=Path+'/Wh_rainbow_b.dat'
+        Cset0=np.loadtxt(file)
+    return ListedColormap(Cset0)
 
 #print(ImageColorMap('Wh_rainbow',grade))

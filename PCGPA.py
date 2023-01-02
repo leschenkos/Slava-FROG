@@ -177,6 +177,23 @@ def load_frog(file):
             frog=Sp[1:]
             frog=frog/frog.max()
             return (T, W, frog)
+        
+    # elif file[-10:]=='h5SpecScan':
+    #     """for files saved by akvlXFROG soft"""
+    #     try:
+    #         data=h5py.File(file, 'r')
+    #     except OSError as er:
+    #         raise ER.ReadError(er)
+    #     else:
+    #         T=data['delays'][:]
+    #         L=data['wavelengths'][:]
+    #         W=2*Pi*c/L*10**9*10**-15
+    #         frog=data['trace'][:]
+    #         frog=frog/frog.max()
+    #         ind=W.argsort()
+    #         W=W[ind]
+    #         frog=frog[:,ind]
+    #         return (T, W, frog)
            
     elif file[-21:]=='akSpecScantransformed':
         """for files saved by akXFROG soft and preprocessed to akSpecScantransformed"""
@@ -196,8 +213,9 @@ def load_frog(file):
             frog=frog/frog.max()
             return (T, W, frog)
         
-    elif file[-11:]=='txtSpecScan':
-        """for files saved by akvlXFROG_txt soft directly"""
+    elif file[-11:]=='txtSpecScan' or file[-6:]=='pyfrog':
+        """for files saved by akvlXFROG_txt soft directly
+        or by the catchFROG py software"""
         try:
             M0=open(file,'r').readline()
             T=np.fromstring(M0,sep='\t') #delays in fs

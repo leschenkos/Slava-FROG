@@ -339,18 +339,20 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
         
         win = pg.GraphicsLayoutWidget()
         p1 = win.addPlot(labels={'bottom': ('delay (fs)'),'left': ('frequency (PHz)')})
-        #,title='FROG'
         img = pg.ImageItem()
         p1.addItem(img)
-        img.setImage(FROG,lut=ImageColorMap('Wh_rainbow',512))
+        img.setImage(FROG)
+        img.setColorMap(ImageColorMap('Wh_rainbow',512))
         
         dy=Y[1]-Y[0]
-        img.scale(X[1]-X[0], dy)
-        img.translate(-len(X)/2, -len(Y)/2+Y[int(len(Y)/2)]/dy)
+        dx=X[1]-X[0]
+        img.setRect(X.min(), Y.min() ,X.max()-X.min(),Y.max()-Y.min())
+        
+    
         win.resize(S*0.99)
         scene.addWidget(win)
         View.setScene(scene)
-
+        
     def showFROGsim(self):
         X=self.Results['T']
         Y=self.Results['W']/2/Pi
@@ -368,18 +370,18 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
         
         win = pg.GraphicsLayoutWidget()
         p1 = win.addPlot(labels={'bottom': ('delay (fs)'),'left': ('frequency (PHz)')})
-        #,title='FROG'
         img = pg.ImageItem()
         p1.addItem(img)
-        img.setImage(FROG,lut=ImageColorMap('Wh_rainbow',512))
+        img.setImage(FROG)
+        img.setColorMap(ImageColorMap('Wh_rainbow',512))
         
         dy=Y[1]-Y[0]
-        img.scale(X[1]-X[0], dy)
-        img.translate(-len(X)/2, -len(Y)/2+Y[int(len(Y)/2)]/dy)
+        dx=X[1]-X[0]
+        img.setRect(X.min(), Y.min() ,X.max()-X.min(),Y.max()-Y.min())
+    
         win.resize(S*0.99)
         scene.addWidget(win)
         View.setScene(scene)
-        
     
     def showerror(self,error):
         self.error_message.setPlaceholderText(error.Message)
