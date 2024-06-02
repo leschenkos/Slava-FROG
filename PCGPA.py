@@ -118,6 +118,12 @@ def spectrum_fromFROG(T,W2,frog,Type='SHG-FROG'):
     it is also assumed that frog has square dimentions propotinal to a power of 2 (2**N)"""
     
     SHG_w=np.sum(frog,axis=0) #get the integrated over delay SHG spectrum from the frog trace
+#    plt.plot(W,SHG_w)
+#    plt.show()
+#    SHG_t=np.sqrt(ifftshift(ifft(SHG_w))) #*np.exp(-1j*W2[0]*T)
+#    SHG_abs=np.abs(SHG_t)
+#    SHG_phase=remove_discontinuity(np.angle(SHG_t),Pi/2)/2
+#    S=fft(fftshift(SHG_abs*np.exp(1j*SHG_phase)*np.exp(1j*W2[0]/2*T)))
     dt=2*Pi/W2[int(len(W2)/2)]/8
     T1=np.linspace(T[0],T[-1],int((T[-1]-T[0])/dt+1)) #better time resolution
     SHG_t=ifft_fixed(T1,W2,SHG_w)
@@ -301,6 +307,11 @@ def resize_frog(T,W,frog,Nbin,Nmax):
     #determine size
     Int_t=np.sum(frog,axis=1)
     Int_w=np.sum(frog,axis=0)
+#    print(len(T),len(Int_t),len(Int_w))
+#    plt.plot(T,Int_t)
+#    plt.show()
+#    plt.plot(Int_w)
+#    plt.show()
     E_part=0.9 #level to equalize size
     
     Et=np.sum(Int_t)
@@ -366,6 +377,7 @@ def multigrig_resize(T,W,frog,Scale):
                                  int(len(frog)/2+len(frog)/rescale/2-int(rescale/2)),rescale)] 
                            for k in range(int(len(frog)/2-len(frog)/rescale/2-int(rescale/2)),
                                  int(len(frog)/2+len(frog)/rescale/2-int(rescale/2)),rescale)])
+        #print(len(frog_out))
     else:
         Ffrog=interpolate.interp2d(T,W,np.transpose(frog),kind='cubic')
         frog_out=np.zeros((Nbin,Nbin))
@@ -393,7 +405,6 @@ def TBP_frog(T,W,frog):
     It1=len(Int_t)
     while np.sum(Int_t[It1:]) < Et*E_part : It1 -= 1
     T0=(T[It0]-T[It1])
-    #print(T0)
     
     Ew=np.sum(Int_w)
     Iw0=1
@@ -401,6 +412,7 @@ def TBP_frog(T,W,frog):
     Iw1=len(Int_w)
     while np.sum(Int_w[Iw1:]) < Ew*E_part : Iw1 -= 1
     W0=(W[Iw0]-W[Iw1])
+    #print(W0)
     
     return T0*W0
 
@@ -473,17 +485,19 @@ def parallel_IG(p,T,W,frog,SpecFund,keep_fundspec=False,max_population=12,NStep=
         Out1=np.array(p.starmap(PCGPA_reconstruct_IG,
                             [[T1,W1,frog1,NStep,Sf1,keep_fundspec,Type,[]] for i in range(population)]))
     else:
-        Out1=np.array(list(map(PCGPA_reconstruct_IG,
+        Out1=list(map(PCGPA_reconstruct_IG,
                             [T1]*population,[W1]*population,[frog1]*population,
                             [NStep]*population,[Sf1]*population,
-                            [keep_fundspec]*population,[Type]*population,[[]]*population)))
-    ind=Out1[:,0].argsort()
-    Out1=Out1[ind]
+                            [keep_fundspec]*population,[Type]*population,[[]]*population))
+    ind=np.array([Out1[i][0] for i in range(len(Out1))]).argsort()
+    Out1=[Out1[m] for m in ind]
     
     #second step with Nbin/2 multigrid
     In2=Out1[:int(len(Out1)/2)] #take best results from the first step
+    In21=[]
     for i in range(len(In2)):
-        (In2[i][1],In2[i][2])=shift2zerodelay(In2[i][1],In2[i][2])
+        In21.append(shift2zerodelay(In2[i][1],In2[i][2]))
+    In2=In21
     (T2,W2,frog2)=multigrig_resize(T,W,frog,2) #resize the FROG
     F2=interpolate.PchipInterpolator(W/2,SpecFund)
     Sf2=F2(W2/2)
@@ -496,12 +510,12 @@ def parallel_IG(p,T,W,frog,SpecFund,keep_fundspec=False,max_population=12,NStep=
                             [[T2,W2,frog2,NStep,Sf2,keep_fundspec,Type,Pulse[i]] 
                             for i in range(len(Pulse))]))
     else:
-        Out2=np.array(list(map(PCGPA_reconstruct_IG,
+        Out2=list(map(PCGPA_reconstruct_IG,
                             [T2]*len(Pulse),[W2]*len(Pulse),[frog2]*len(Pulse),[NStep]*len(Pulse),
                             [Sf2]*len(Pulse),[keep_fundspec]*len(Pulse),[Type]*len(Pulse),
-                            Pulse)))
-    ind=Out2[:,0].argsort()
-    Out2=Out2[ind]
+                            Pulse))
+    ind=np.array([Out1[i][0] for i in range(len(Out1))]).argsort()
+    Out1=[Out1[m] for m in ind]
     #fit to the full original time window
     pulse_out=Out2[0][1]
     Fp=interpolate.PchipInterpolator(T2,pulse_out)
@@ -538,6 +552,8 @@ def PCGPA_reconstruct_IG(T,W,frog,Steps,SpecFund,keep_fundspec,Type,pulse):
                 gate=np.copy(pulse)
             elif Type=='TG-FROG':
                 gate=np.abs(np.abs(np.copy(pulse)))**2
-
+            
+    #output spectrum
+    #pulse_w=fftshift(fft(fftshift(pulse)))
     return (G,pulse,gate)
     

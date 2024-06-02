@@ -1,5 +1,5 @@
 """FROG reconstraction with Qt GUI
-v2.0 @ Vyacheslav Leshchenko 2021
+v2.0 @ Vyacheslav Leshchenko 2024
 
 """
 import time     
@@ -8,18 +8,18 @@ import sys
 Path=os.path.dirname((os.path.abspath(__file__)))
 sys.path.append(Path)
 from PyQt5 import QtWidgets
-import FROG_Qt
+# import FROG_Qt
 import numpy as np
 Pi=np.pi
 import pyqtgraph as pg
-from PyQt5 import QtWidgets
+from PyQt5 import QtWidgets, uic
 import classes.error_class as ER
 from classes.Pulse_class import width, remove_phase_jumps
 from color_maps.color_maps import ImageColorMap
 #import PyQt5
 from scipy import interpolate
 import PCGPA
-from myconstants import c
+from myconstants import c, Hz2lam
 from scipy.fftpack import fft, ifft, fftshift, ifftshift
 import matplotlib.pyplot as plt
 from load_files.load_folder import imp_spec
@@ -29,11 +29,12 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
-class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
+class FROG_class(QtWidgets.QMainWindow):
     def __init__(self):
         self.app=QtWidgets.QApplication(sys.argv)
-        super().__init__()
-        self.setupUi(self)
+        super(FROG_class, self).__init__()
+        uic.loadUi(Path+"\\Qt\\FROG_GUI2.1.ui", self)
+        self.show()
         
         #add frog types
         self.Type.addItems(('SHG-FROG','TG-FROG'))
@@ -47,9 +48,13 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
         self.browser_fun.clicked.connect(self.browser_fund)
         self.browser_FROG.clicked.connect(self.browser_SHG)
         self.checkmaxwavelength.clicked.connect(self.maxwavelength_click)
-        self.maxwavelength.valueChanged.connect(self.set_wavelength)
+        self.maxwavelength.valueChanged.connect(self.set_wavelength_delay)
         self.checkminwavelength.clicked.connect(self.minwavelength_click)
-        self.minwavelength.valueChanged.connect(self.set_wavelength)
+        self.minwavelength.valueChanged.connect(self.set_wavelength_delay)
+        self.checkmaxdel.clicked.connect(self.maxdelay_click)
+        self.maxdelay.valueChanged.connect(self.set_wavelength_delay)
+        self.checkmindel.clicked.connect(self.mindelay_click)
+        self.mindelay.valueChanged.connect(self.set_wavelength_delay)
         self.checktranspose.clicked.connect(self.transpose_frog)
         self.checkdelaycorrection.clicked.connect(self.delaycorrection_click)
         self.delay_correction.valueChanged.connect(self.set_delaycorrection)
@@ -85,6 +90,7 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
              'G_best' : None, 'pulse_best' : None, 'pulse_w_best' : None, 'frog_out_best' : None,
              'frog_edge_bkg' : None}
 
+
     def setType(self):
         """read specified FROG type"""
         self.Args['type']=self.Type.currentText()
@@ -107,7 +113,7 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
             self.file_SHG.insert(self.Args['frog_file'])
             try:
                 self.loadFROG()
-                self.set_wavelength()
+                self.set_wavelength_delay()
                 self.set_bkg()
                 self.showFROGex()
             except ER.SL_exception as error:
@@ -143,11 +149,11 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
                 self.Args['fundspec_file'] == ''
                 self.file_fun.clear()
     
-    def set_wavelength(self):
+    def set_wavelength_delay(self):
         self.error_message.setPlaceholderText('')#clear errors
         
-        if self.checkmaxwavelength.isChecked() or self.checkminwavelength.isChecked():
-            if self.Args['frog_file'][-3:]=='frg' or self.Args['frog_file'][-4:]=='frog':
+        if self.checkmaxwavelength.isChecked() or self.checkminwavelength.isChecked() or self.checkmaxdel.isChecked() or self.checkmindel.isChecked():
+            if self.Args['frog_file'][-3:]=='frg' or self.Args['frog_file'][-4:]=='frog' and (not self.Args['frog_file'][-6:]=='pyfrog'):
                self.error_message.setPlaceholderText('Not an error. Note that frg file is assumed to be proparly prepared, thus wavelength limits and delay correction are not applied to it. (though symmetrization and background substraction do work)')
             else:
                 self.Args['MaxWavelength']=self.maxwavelength.value()
@@ -168,32 +174,68 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
                         Wmin=Wmax
                         Wmax=Wmin0
                         
-                    ind=np.logical_and(self.Results['W_load'] >= Wmin , self.Results['W_load'] <= Wmax)
-                    self.Results['W']=np.copy(self.Results['W_load'][ind])
-                    self.Results['frog_in_0']=self.Results['frog_load'][:,ind]
+                    self.Args['MaxDelay']=self.maxdelay.value()
+                    self.Args['MinDelay']=self.mindelay.value()
+                    if not self.Args['frog_file'] == '':
+                        if self.checkmaxdel.isChecked():
+                            Tmax=self.Args['MaxDelay']
+                        else:
+                            Tmax=self.Results['T_load'][-1]
+                        if self.checkmindel.isChecked():
+                            Tmin=self.Args['MinDelay']
+                        else:
+                            Tmin=self.Results['T_load'][0]
+                            
+                        if Tmin >= Tmax:
+                            self.showerror(ER.SL_exception('min delay has to be smaller than min delay'))
+                            Tmin0=Tmin
+                            Tmin=Tmax
+                            Tmax=Tmin0
+                    indT=np.logical_and(self.Results['T_load'] >= Tmin , self.Results['T_load'] <= Tmax)
+                    self.Results['T']=np.copy(self.Results['T_load'][indT])
+                        
+                    indW=np.logical_and(self.Results['W_load'] >= Wmin , self.Results['W_load'] <= Wmax)
+                    self.Results['W']=np.copy(self.Results['W_load'][indW])
+                    self.Results['frog_in_0']=self.Results['frog_load'][indT][:,indW]
                     self.remove_bkg()
                     self.showFROGex()
         else:
             if not self.Args['frog_file'] == '':
                 self.Results['W']=np.copy(self.Results['W_load'])
+                self.Results['T']=np.copy(self.Results['T_load'])
                 self.Results['frog_in_0']=self.Results['frog_load']
                 self.remove_bkg()
                 self.showFROGex()
-        self.Results['frog_in_processed?']=False        
+        self.Results['frog_in_processed?']=False   
+        
 
     def maxwavelength_click(self):
         if self.checkmaxwavelength.isChecked():
             self.maxwavelength.setEnabled(True)            
         else:
             self.maxwavelength.setEnabled(False)
-        self.set_wavelength()  
+        self.set_wavelength_delay()  
         
     def minwavelength_click(self):
         if self.checkminwavelength.isChecked():
             self.minwavelength.setEnabled(True)            
         else:
             self.minwavelength.setEnabled(False)
-        self.set_wavelength()  
+        self.set_wavelength_delay()  
+        
+    def maxdelay_click(self):
+        if self.checkmaxdel.isChecked():
+            self.maxdelay.setEnabled(True)            
+        else:
+            self.maxdelay.setEnabled(False)
+        self.set_wavelength_delay()  
+    
+    def mindelay_click(self):
+        if self.checkmindel.isChecked():
+            self.mindelay.setEnabled(True)            
+        else:
+            self.mindelay.setEnabled(False)
+        self.set_wavelength_delay()  
 
     def set_delaycorrection(self):
         self.error_message.setPlaceholderText('')#clear errors
@@ -236,7 +278,7 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
             self.Args['substract_bkgedge']=True
         else:
             self.Args['substract_bkgedge']=False
-            self.set_wavelength()
+            self.set_wavelength_delay()
         self.set_bkg()
     
     def set_bkg(self):
@@ -260,6 +302,7 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
         self.Results['frog_in'][ind]=0
         M=self.Results['frog_in'].max()
         self.Results['frog_in']=self.Results['frog_in']/M
+    
             
     def symmetry_click(self):
         if self.check_symmetry.isChecked():
@@ -307,7 +350,7 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
         
         self.Results['W']=np.copy(self.Results['W_load'])
         if self.checkmaxwavelength.isChecked() or self.checkminwavelength.isChecked():
-            self.set_wavelength()
+            self.set_wavelength_delay()
         self.remove_bkg()
         if self.check_symmetry.isChecked():
             self.symmetry_click()
@@ -326,7 +369,6 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
         X=self.Results['T']
         Y=self.Results['W']/2/Pi
         FROG=self.Results['frog_in']
-        # Ntick=7 #number of ticks
         
         #log scaling if selected
         if self.Args['logscale']:
@@ -348,7 +390,7 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
         dx=X[1]-X[0]
         img.setRect(X.min(), Y.min() ,X.max()-X.min(),Y.max()-Y.min())
         
-    
+
         win.resize(S*0.99)
         scene.addWidget(win)
         View.setScene(scene)
@@ -357,7 +399,6 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
         X=self.Results['T']
         Y=self.Results['W']/2/Pi
         FROG=self.Results['frog_out_best']
-        # Ntick=7 #number of ticks
         
         #log scaling if selected
         if self.Args['logscale']:
@@ -378,14 +419,15 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
         dy=Y[1]-Y[0]
         dx=X[1]-X[0]
         img.setRect(X.min(), Y.min() ,X.max()-X.min(),Y.max()-Y.min())
-    
+
         win.resize(S*0.99)
         scene.addWidget(win)
         View.setScene(scene)
+        
+
     
     def showerror(self,error):
-        self.error_message.setPlaceholderText(error.Message)
-        #print('open error', error.Message)     
+        self.error_message.setPlaceholderText(error.Message)   
      
     def readparam(self):
         """read parameters for the reconstruction"""
@@ -402,20 +444,13 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
         self.Args['symmetrization']=self.check_symmetry.isChecked() 
         self.Args['multi_grid']=self.multi_grid.isChecked()
         
-        if self.check_flatPH.isChecked():
-            self.Args['init_phase']='random'
-        elif self.check_flatPH.isChecked():
-            self.Args['init_phase']='flat'
-        elif self.check_flatPH.isChecked():
-            self.Args['init_phase']='GDD'
-            
-                   
-        
+        self.Args['init_phase']='random'
         if self.Args['frog_file'] == '':
             raise ER.SL_exception('no FROG file is loaded')
      
     def fstop(self):
         self.Stop=False
+        #print('stop')
         self.error_message.setPlaceholderText('')
         gc.collect()
         
@@ -429,10 +464,10 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
         else:
         
             #preprocess
-            if not self.Args['frog_file'][-3:]=='frg' and not self.Args['frog_file'][-4:]=='frog' and not self.Results['frog_in_processed?']:
+            if not self.Args['frog_file'][-3:]=='frg' and (not self.Args['frog_file'][-4:]=='frog' or self.Args['frog_file'][-6:]=='pyfrog') and not self.Results['frog_in_processed?']:
                 """resize frog"""
                 self.set_delaycorrection()
-                self.set_wavelength()
+                self.set_wavelength_delay()
                 (self.Results['T'],self.Results['W'],self.Results['frog_in_0'])=PCGPA.resize_frog(
                         self.Results['T'],self.Results['W'],self.Results['frog_in_0'],PCGPA.TBP_frog(
                                 self.Results['T'],self.Results['W'],self.Results['frog_in_0'])*1.3*2,
@@ -456,7 +491,6 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
                             [frog[int(len(frog)/2)]],np.flip(frogsim,axis=0)),axis=0)
                 self.Results['frog_in']=self.Results['frog_in']/np.max(self.Results['frog_in']) #normalization
                 self.showFROGex()
-                
             
             #initiate counters
             self.Results['Step']=0
@@ -493,6 +527,8 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
                 ind0=Sout < np.zeros(Sout.shape)
                 Sout[ind0]=0
                 self.Results['Sfund']=Sout**2
+#                plt.plot(Wout,Sout)
+#                plt.show()
             else:
                 #get fundamental spectrum from the FROG
                 self.Results['Sfund']=PCGPA.spectrum_fromFROG(
@@ -519,9 +555,8 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
                     gate_t=np.abs(np.copy(pulse_t))**2
                     # print(self.Args['type'])
                 self.Results['pulse']=pulse_t
-                #self.Results['pulse_w']=pulse_w
                 self.Results['gate']=gate_t
-
+            
             self.reconstruction()
                     
             self.showresults()
@@ -532,9 +567,28 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
         """preprocess with multi-grid algorithm"""
         Max_population=16;
         MNStep=5;
+        # print('preproc')
         if self.Args['parallel']:
+#             Ncpu=cpu_count()
+#             if Ncpu > 1:
+#                 Npr=Ncpu-1 #number of parallel processes in the Pool
+#             else:
+#                 Npr=1
+#             p=Pool(Npr)
+# #            print(1)
+#             self.Results['pulse']=PCGPA.parallel_IG(p,self.Results['T'],self.Results['W'],
+#                         self.Results['frog_in'], self.Results['Sfund'],
+#                         keep_fundspec=self.Args['fix_fund_spec'],max_population=Max_population,NStep=MNStep,
+#                         parallel=True)
+#             self.Results['gate']=np.copy(self.Results['pulse'])
+# #            plt.plot(np.abs(self.Results['pulse']))
+# #            plt.show()5
+# #            print(2)
+#             p.close()
+#             p.join()
             pass
         else:
+            # print('multi')
             self.Results['pulse']=PCGPA.parallel_IG(None,self.Results['T'],self.Results['W'],
                         self.Results['frog_in'], self.Results['Sfund'],
                         keep_fundspec=self.Args['fix_fund_spec'],max_population=Max_population,NStep=MNStep,
@@ -576,7 +630,6 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
                 elif self.Args['type']=='TG-FROG':
                     gate_t=np.abs(np.abs(np.copy(pulse_t)))**2
                 self.Results['pulse']=pulse_t
-                #self.Results['pulse_w']=pulse_w
                 self.Results['gate']=gate_t
                 #recalculate frog_sim and G for the corrected pulse
                 (self.Results['G'],self.Results['frog_out'])=PCGPA.PCGPA_G(
@@ -597,7 +650,11 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
                 self.Results['gate_best']=self.Results['gate']
                 self.Results['frog_out_best']=self.Results['frog_out']
                 #shift to 0 delay
-
+                                                          
+            #                #shift to 0 delay
+            #                if self.Results['Step'] in NDzero:
+            #                    (self.Results['pulse'], self.Results['gate'])= PCGPA.shift2zerodelay(self.Results['pulse'],self.Results['gate'])
+            
             self.Results['Time']=time.time()-timestart
             if (self.Results['Time']-timershow) > Showstep:
                 timershow=self.Results['Time']
@@ -610,7 +667,6 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
                 
             if self.Results['Step']==0:
                 self.showresults()
-            
             self.Results['Step']+=1
     
     def showresults(self):
@@ -622,7 +678,7 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
         
     def show_width(self):
         self.duration.display(width(self.Results['T'],np.abs(self.Results['pulse_best'])**2))
-        self.duration_e.display(width(self.Results['T'],np.abs(self.Results['pulse_best'])**2,method='e**-2'))
+        self.duration_e.display(width(self.Results['T'],np.abs(self.Results['pulse_best'])**2,method='e^-2'))
         self.Tstep.display(self.Results['T'][1]-self.Results['T'][0])
         self.Swidth.display(width(2*Pi*c/self.Results['Wf']/10**15*10**9,np.abs(self.Results['pulse_w_best'])**2))
         NW0=int(len(self.Results['Wf'])/2)
@@ -647,13 +703,24 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
         p2.setXLink(p1)
         p1.getAxis('right').setLabel('phase rad', color='#00ff00')
         
+        
+        p1.showAxis('top')
+        p1.getAxis('top').setLabel('wavelength nm')
+        
         def updateViews():
             p2.setGeometry(p1.vb.sceneBoundingRect())
             p2.linkedViewChanged(p1.vb, p2.XAxis)
+            
+            #wavelength
+            Wrange=p1.getAxis('bottom').range
+            Wr=np.linspace(Wrange[0],Wrange[1],5)
+            ax=p1.getAxis('top')
+            # Pass the list in, *in* a list.
+            ax.setTicks([[(w,str(int(Hz2lam(w*10**15)*10**3))) for w in Wr]])
            
         updateViews()
         p1.vb.sigResized.connect(updateViews)
-            
+        
         p2.addItem(pg.PlotCurveItem(self.Results['Wf']/2/Pi,np.angle(self.Results['pulse_w_best']), 
                                     pen=pg.mkPen((0,255,0), width=2.5)))
         
@@ -675,7 +742,6 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
         self.error.display(self.Results['G_best'])
         self.timer.display(self.Results['Time'])
         self.progressBar.setValue(self.Results['Step'])
-        
     
     def savefrog(self,file):
         if type(file) == bool:
@@ -749,7 +815,7 @@ class FROG_class(QtWidgets.QMainWindow, FROG_Qt.Ui_MainWindow):
             file=QtWidgets.QFileDialog.getSaveFileName(self)[0]
         file+='_results.txt'
         DT=width(self.Results['T'],np.abs(self.Results['pulse_best'])**2)
-        DTe=width(self.Results['T'],np.abs(self.Results['pulse_best'])**2,method='e**-2')
+        DTe=width(self.Results['T'],np.abs(self.Results['pulse_best'])**2,method='e^-2')
         dt=self.Results['T'][1]-self.Results['T'][0]
         DW=width(2*Pi*c/self.Results['Wf']/10**15*10**9,np.abs(self.Results['pulse_w_best'])**2)
         NW0=int(len(self.Results['Wf'])/2)
@@ -785,3 +851,4 @@ def main():
 if __name__ == '__main__':
     main()
     gc.collect()
+
