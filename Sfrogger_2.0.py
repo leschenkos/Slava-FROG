@@ -14,7 +14,6 @@ Pi=np.pi
 import pyqtgraph as pg
 from PyQt5 import QtWidgets, uic
 import classes.error_class as ER
-from classes.Pulse_class import width, remove_phase_jumps
 from color_maps.color_maps import ImageColorMap
 #import PyQt5
 from scipy import interpolate
@@ -27,6 +26,7 @@ from multiprocessing import Pool, cpu_count
 import gc
 import warnings
 warnings.filterwarnings("ignore")
+from PCGPA import width, remove_phase_jumps
 
 
 class FROG_class(QtWidgets.QMainWindow):
@@ -839,7 +839,6 @@ class FROG_class(QtWidgets.QMainWindow):
     def closeEvent(self, event):
         self.fstop()
         event.accept()
-    
 
 
 def main():
