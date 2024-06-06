@@ -219,7 +219,7 @@ def load_frog(file):
             frog=frog/frog.max()
             return (T, W, frog)
         
-    elif file[-11:]=='txtSpecScan' or file[-6:]=='pyfrog':
+    elif file[-11:]=='txtSpecScan' :
         """for files saved by akvlXFROG_txt soft directly
         or by the catchFROG py software"""
         try:
@@ -237,6 +237,26 @@ def load_frog(file):
             frog=frog/frog.max()
             return (T, W, frog)
         
+    elif file[-6:]=='pyfrog':
+        """for files saved by akvlXFROG_txt soft directly
+        or by the catchFROG py software"""
+        try:
+            F=open(file,'r')
+            F.readline()
+            M0=F.readline()
+            T=np.fromstring(M0,sep='\t') #delays in fs
+            Sp=np.genfromtxt(file,skip_header=2)
+        except OSError as er:
+            raise ER.ReadError(er)
+        else:
+            W=2*Pi*c/Sp[0]*10**9*10**-15 #frequencies
+            ind=W.argsort()
+            W=W[ind]
+            Sp1=Sp[1:]
+            frog=Sp1[:,ind] #frog data
+            frog=frog/frog.max()
+            return (T, W, frog)
+    
     elif file[-4:]=='frog':
         """for files saved by Sfrogger"""
         try:
