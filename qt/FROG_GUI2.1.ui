@@ -25,7 +25,7 @@
    </font>
   </property>
   <property name="windowTitle">
-   <string>Slava FROG v2.0</string>
+   <string>Slava FROG v2.1</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <property name="sizePolicy">
@@ -443,6 +443,16 @@
          </widget>
         </item>
         <item>
+         <widget class="QCheckBox" name="check_Jacobian">
+          <property name="text">
+           <string>apply Jacobian to spectrum (for lam to w conversion)</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
          <widget class="QCheckBox" name="check_symmetry">
           <property name="text">
            <string>symmetrization (applied after pressing start)</string>
@@ -466,8 +476,11 @@
             <property name="decimals">
              <number>2</number>
             </property>
+            <property name="minimum">
+             <double>0.000000000000000</double>
+            </property>
             <property name="maximum">
-             <double>10.000000000000000</double>
+             <double>100000000.000000000000000</double>
             </property>
             <property name="singleStep">
              <double>0.100000000000000</double>

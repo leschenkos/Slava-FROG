@@ -24,31 +24,22 @@ from scipy import interpolate
 
 def width(X,Y,method='FWHM'):
     """computed the width (for example pulse duration of spectrum width) of a data set.
-    data are expected to be 1d np.array"""
+    data are expected to be 1d np.array
+    
+    method: FWHM  e^-2   e^-1  4sigma """
     if len(Y)>0:
         M=Y.max()
         if method=='FWHM':
             """in case of mutiple peaks, the maximum width will be returned"""
-            # NM=Y.argmax()
-            # N1=NM
-            # N2=NM
-            # for i in range(NM-1,-1,-1):
-            #     if Y[i] > M/2: N1=i
-            # for i in range(NM+1,len(Y)):
-            #     if Y[i] > M/2: N2=i
             level=0.5
             ind=Y > M*level
             indx=np.where(ind == True)[0]
-            # print('indx ',indx,len(indx))
             if len(indx)>1:
                 N1=indx[0]
                 N2=indx[-1]
             else:
                 N1=1
                 N2=0
-            # print(X[N1],X[N2],N1,N2)
-            # print(Y[N1]/M,Y[N2]/M)
-            # print(Y[N1-1]/M,Y[N2+1]/M)
             
         elif method == 'e^-2':
             level=np.exp(-2)
@@ -60,7 +51,6 @@ def width(X,Y,method='FWHM'):
             else:
                 N1=1
                 N2=0
-            # print(X[N1],X[N2])
         elif method == 'e^-1':
             level=np.exp(-1)
             ind=Y > level*M
@@ -71,7 +61,6 @@ def width(X,Y,method='FWHM'):
             else:
                 N1=1
                 N2=0
-            # print(X[N1],X[N2])
             
         elif method == '4sigma':
             Xmean=np.sum(X*Y)/np.sum(Y)
@@ -79,7 +68,6 @@ def width(X,Y,method='FWHM'):
             Width=4*sigmaX
         else:
             raise ER.SL_exception('unknown method')
-        # print("XX: ", X[N2]-X[N1],N2,N1)
         if method == '4sigma':
             return Width
         else:
@@ -91,11 +79,8 @@ def width(X,Y,method='FWHM'):
                     y2=Y[N1]
                     x1=X[N1-1]
                     x2=X[N1]
-                    # print(y1)
-                    # print((M*level-y1)/(y2-y1))
                     if abs(y2-y1) > 10**-5:
                         X1=x1+(M*level-y1)/(y2-y1)*(x2-x1) #linear interpolation for accuracy improvement
-                        # print(M*level,y1)
                     else:
                         X1=x1
             else:
@@ -112,14 +97,11 @@ def width(X,Y,method='FWHM'):
                     x2=X[N2+1]
                     if abs(y2-y1) > 10**-5:
                         X2=x1+(M*level-y1)/(y2-y1)*(x2-x1) #linear interpolation for accuracy improvement
-                        # print('2 ',M*level,y1)
                     else:
                         X2=x1
             else:
                 X2=X[-1]
-            # print(abs(y2-y1))
             Width=np.abs(X2-X1)
-            # print("width: ",X2-X1)
             return Width
         
     else:
@@ -215,15 +197,19 @@ def remove_linear_phase(pulse,gate):
     It0=len(Int_t)
     while np.sum(Int_t[It0:]) < Et*E_part : It0 -= 1
     
-    X=np.arange(It0,It1)
-    Y=Phase[It0:It1]
-    slope=np.polyfit(X,Y,1)[0] #!!! sometimes returns expected non-empty vector for x
-    
-    ind=np.arange(len(pulse))
-    pulseout=np.abs(pulse)*np.exp(1j*(np.angle(pulse)-ind*slope))
-    gateout=np.abs(gate)*np.exp(1j*(np.angle(gate)-ind*slope))
-    
-    return (pulseout,gateout)
+    try:
+        X=np.arange(It0,It1)
+        Y=Phase[It0:It1]
+        # print(X,Y)
+        slope=np.polyfit(X,Y,1)[0] #!!! sometimes returns expected non-empty vector for x
+        
+        ind=np.arange(len(pulse))
+        pulseout=np.abs(pulse)*np.exp(1j*(np.angle(pulse)-ind*slope))
+        gateout=np.abs(gate)*np.exp(1j*(np.angle(gate)-ind*slope))
+        
+        return (pulseout,gateout)
+    except TypeError:
+        return (pulse,gate)
 
 def spectrum_fromFROG(T,W2,frog,Type='SHG-FROG'):
     """frog is supposed to be oriented by delay, that means that each raw (frog[i]) 
@@ -231,12 +217,6 @@ def spectrum_fromFROG(T,W2,frog,Type='SHG-FROG'):
     it is also assumed that frog has square dimentions propotinal to a power of 2 (2**N)"""
     
     SHG_w=np.sum(frog,axis=0) #get the integrated over delay SHG spectrum from the frog trace
-#    plt.plot(W,SHG_w)
-#    plt.show()
-#    SHG_t=np.sqrt(ifftshift(ifft(SHG_w))) #*np.exp(-1j*W2[0]*T)
-#    SHG_abs=np.abs(SHG_t)
-#    SHG_phase=remove_discontinuity(np.angle(SHG_t),Pi/2)/2
-#    S=fft(fftshift(SHG_abs*np.exp(1j*SHG_phase)*np.exp(1j*W2[0]/2*T)))
     dt=2*Pi/W2[int(len(W2)/2)]/8
     T1=np.linspace(T[0],T[-1],int((T[-1]-T[0])/dt+1)) #better time resolution
     SHG_t=ifft_fixed(T1,W2,SHG_w)
@@ -293,26 +273,12 @@ def load_frog(file):
             raise ER.ReadError(er)
         else:
             W=2*Pi*c/Sp[0]*10**9*10**-15
-            frog=Sp[1:]
+            ind=W.argsort()
+            W=W[ind]
+            Sp1=Sp[1:]
+            frog=Sp1[:,ind] #frog data
             frog=frog/frog.max()
             return (T, W, frog)
-        
-    # elif file[-10:]=='h5SpecScan':
-    #     """for files saved by akvlXFROG soft"""
-    #     try:
-    #         data=h5py.File(file, 'r')
-    #     except OSError as er:
-    #         raise ER.ReadError(er)
-    #     else:
-    #         T=data['delays'][:]
-    #         L=data['wavelengths'][:]
-    #         W=2*Pi*c/L*10**9*10**-15
-    #         frog=data['trace'][:]
-    #         frog=frog/frog.max()
-    #         ind=W.argsort()
-    #         W=W[ind]
-    #         frog=frog[:,ind]
-    #         return (T, W, frog)
            
     elif file[-21:]=='akSpecScantransformed':
         """for files saved by akXFROG soft and preprocessed to akSpecScantransformed"""
@@ -355,21 +321,39 @@ def load_frog(file):
         or by the catchFROG py software"""
         try:
             F=open(file,'r')
-            F.readline()
-            M0=F.readline()
+            S=F.readline()
+            if S[0]=='m':
+                M0=F.readline()
+                Sp=np.genfromtxt(file,skip_header=2)
+            else:
+                M0=S
+                Sp=np.genfromtxt(file,skip_header=1)
             T=np.fromstring(M0,sep='\t') #delays in fs
-            Sp=np.genfromtxt(file,skip_header=2)
+            #print(T)
+            
         except OSError as er:
             raise ER.ReadError(er)
         else:
             W=2*Pi*c/Sp[0]*10**9*10**-15 #frequencies
             ind=W.argsort()
             W=W[ind]
+            #print(W)
             Sp1=Sp[1:]
             frog=Sp1[:,ind] #frog data
             frog=frog/frog.max()
+            #get rid of problems with non-incrasing delay points
+            for i in range(1,len(T)):
+                if T[i] < T[i-1]:
+                    T0=T[i-1]
+                    T[i-1]=T[i]
+                    T[i]=T0
+                    f0=frog[i-1]
+                    frog[i-1]=frog[i]
+                    frog[i]=f0
+                elif T[i] == T[i-1]:
+                    T[i]+=0.01
             return (T, W, frog)
-    
+        
     elif file[-4:]=='frog':
         """for files saved by Sfrogger"""
         try:
@@ -381,6 +365,8 @@ def load_frog(file):
         else:
             W=2*Pi*Sp[0] #frequencies
             frog=Sp[1:] #frog data
+
+
             return (T, W, frog)
         
     elif file[-3:]=='frg':
@@ -432,19 +418,26 @@ def preprocess_frog(T,W,frog,Lmax=None,background=0):
     Tout=T
     return (Tout,Wout,frog_out)
 
-def resize_frog(T,W,frog,Nbin,Nmax):
+def resize_frog(T,W,frog,Nbin,Nmax,Jacobian=False):
     """prepares a proper .frg file with NbinxNbin size
     Nbis is the desired size of the array
     Nmax is the max size of the array
+    Jacobian if apply Jacobian to the spectrum after conversion to frequency
     """
+    #apply Jacobian
+    if Jacobian:
+        lam=2*Pi*c/W*10**6*10**15 #in um
+        DW=np.roll(W,1)-W
+        DW[0]=DW[1]
+        Dlam=np.roll(lam,1)-lam
+        Dlam[0]=Dlam[1]
+        Cor=Dlam/DW
+        Cor/=Cor.max()
+        Jc=np.ones(len(frog))[:,None]*Cor
+        frog = frog * Jc
     #determine size
     Int_t=np.sum(frog,axis=1)
     Int_w=np.sum(frog,axis=0)
-#    print(len(T),len(Int_t),len(Int_w))
-#    plt.plot(T,Int_t)
-#    plt.show()
-#    plt.plot(Int_w)
-#    plt.show()
     E_part=0.9 #level to equalize size
     
     Et=np.sum(Int_t)
@@ -480,12 +473,14 @@ def resize_frog(T,W,frog,Nbin,Nmax):
     #output trace
     frog2=np.zeros((Nbin,Nbin))
     Wout=np.array([W[Nw0]+dw*(i-Nbin/2) for i in range(Nbin)])
+    # print(Wout)
     Tout=np.array([T[Nt0]+dt*(i-Nbin/2) for i in range(Nbin)])
-    indW=np.logical_and(np.ones(Nbin)*W[0] <= Wout, Wout <= np.ones(Nbin)*W[-1])
-    Ffrog=interpolate.interp2d(T,W,np.transpose(frog),kind='cubic')
+    # print(Tout)
+    indW=np.logical_and(np.ones(Nbin)*W[0] <= Wout, Wout <= np.ones(Nbin)*W[-1]) 
+    Ffrog=interpolate.RectBivariateSpline(T,W,frog) #,kind='cubic'
     for i in range(Nbin):
         if T[0]<=Tout[i]<=T[-1]:
-            frog2[i][indW]=np.transpose(Ffrog(Tout[i],Wout[indW]))[0]
+            frog2[i][indW]=Ffrog(Tout[i],Wout[indW])[0]
             ind2=frog2[i] < np.zeros(Nbin)
             frog2[i][ind2]=np.zeros(np.sum(ind2)) #remove negative values which could appear after interpolation
     return (Tout-T[Nt0],Wout,frog2)
@@ -512,10 +507,10 @@ def multigrig_resize(T,W,frog,Scale):
                                  int(len(frog)/2+len(frog)/rescale/2-int(rescale/2)),rescale)])
         #print(len(frog_out))
     else:
-        Ffrog=interpolate.interp2d(T,W,np.transpose(frog),kind='cubic')
+        Ffrog=interpolate.RectBivariateSpline(T,W,np.transpose(frog))#,kind='cubic'
         frog_out=np.zeros((Nbin,Nbin))
         for i in range(Nbin):
-            frog_out[i]=np.transpose(Ffrog(Tout[i],Wout))[0]
+            frog_out[i]=Ffrog(Tout[i],Wout)[0]
             
     #zero negative values
     ind0=frog_out < np.zeros(frog_out.shape)
@@ -685,8 +680,6 @@ def PCGPA_reconstruct_IG(T,W,frog,Steps,SpecFund,keep_fundspec,Type,pulse):
                 gate=np.copy(pulse)
             elif Type=='TG-FROG':
                 gate=np.abs(np.abs(np.copy(pulse)))**2
-            
-    #output spectrum
-    #pulse_w=fftshift(fft(fftshift(pulse)))
+
     return (G,pulse,gate)
     

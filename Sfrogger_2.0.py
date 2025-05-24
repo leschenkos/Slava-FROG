@@ -1,5 +1,5 @@
 """FROG reconstraction with Qt GUI
-v2.0 @ Vyacheslav Leshchenko 2024
+v2.0 @ Vyacheslav Leshchenko 2025
 
 """
 import time     
@@ -8,14 +8,12 @@ import sys
 Path=os.path.dirname((os.path.abspath(__file__)))
 sys.path.append(Path)
 from PyQt5 import QtWidgets
-# import FROG_Qt
 import numpy as np
 Pi=np.pi
 import pyqtgraph as pg
 from PyQt5 import QtWidgets, uic
 import classes.error_class as ER
 from color_maps.color_maps import ImageColorMap
-#import PyQt5
 from scipy import interpolate
 import PCGPA
 from myconstants import c, Hz2lam
@@ -38,7 +36,6 @@ class FROG_class(QtWidgets.QMainWindow):
         
         #add frog types
         self.Type.addItems(('SHG-FROG','TG-FROG'))
-        # self.type='SHG-FROG' #default type
         self.Type.currentIndexChanged.connect(self.setType)
         
         #main functions
@@ -82,7 +79,7 @@ class FROG_class(QtWidgets.QMainWindow):
           'parallel_proc' : 4, 'delay correction' : False, 'delay corection coefficient' : 1.,
           'multi_grid' : False, 'parallel' : False, 'substract_bkg' : False, 'background' : 0.,
           'symmetrization' : False, 'logscale' : False, 'max size' : 0, 'init_phase' : 'random',
-          'substract_bkgedge' : False, 'type' : 'SHG-FROG'}
+          'substract_bkgedge' : False, 'type' : 'SHG-FROG', 'Jacobian' : False}
     
     Results={'pulse' : None, 'gate' : None, 'G' : None, 'frog_load' : [],'frog_in' : None, 'frog_out' : None, 
              'frog_in_0' : None,'W' : None,'W_load' : None, 'Wf' : None, 'Sfund' : None, 'T' : None, 'T_load' : None, 
@@ -170,6 +167,7 @@ class FROG_class(QtWidgets.QMainWindow):
                         
                     if Wmin >= Wmax:
                         self.showerror(ER.SL_exception('max wavelenghth has to be smaller than min wavelength'))
+                        print(Wmin, Wmax)
                         Wmin0=Wmin
                         Wmin=Wmax
                         Wmax=Wmin0
@@ -443,6 +441,7 @@ class FROG_class(QtWidgets.QMainWindow):
         self.Args['parallel']=False
         self.Args['symmetrization']=self.check_symmetry.isChecked() 
         self.Args['multi_grid']=self.multi_grid.isChecked()
+        self.Args['Jacobian']=self.check_Jacobian.isChecked() 
         
         self.Args['init_phase']='random'
         if self.Args['frog_file'] == '':
@@ -468,10 +467,11 @@ class FROG_class(QtWidgets.QMainWindow):
                 """resize frog"""
                 self.set_delaycorrection()
                 self.set_wavelength_delay()
+               
                 (self.Results['T'],self.Results['W'],self.Results['frog_in_0'])=PCGPA.resize_frog(
                         self.Results['T'],self.Results['W'],self.Results['frog_in_0'],PCGPA.TBP_frog(
                                 self.Results['T'],self.Results['W'],self.Results['frog_in_0'])*1.3*2,
-                                self.Args['max size'])
+                                self.Args['max size'],self.Args['Jacobian'])
                 #*1.3 might be a bit too small for pulses with very large chirp, so be careful (and modify if necessary)
                 self.remove_bkg()
                 self.showFROGex()
@@ -527,8 +527,6 @@ class FROG_class(QtWidgets.QMainWindow):
                 ind0=Sout < np.zeros(Sout.shape)
                 Sout[ind0]=0
                 self.Results['Sfund']=Sout**2
-#                plt.plot(Wout,Sout)
-#                plt.show()
             else:
                 #get fundamental spectrum from the FROG
                 self.Results['Sfund']=PCGPA.spectrum_fromFROG(
@@ -569,26 +567,9 @@ class FROG_class(QtWidgets.QMainWindow):
         MNStep=5;
         # print('preproc')
         if self.Args['parallel']:
-#             Ncpu=cpu_count()
-#             if Ncpu > 1:
-#                 Npr=Ncpu-1 #number of parallel processes in the Pool
-#             else:
-#                 Npr=1
-#             p=Pool(Npr)
-# #            print(1)
-#             self.Results['pulse']=PCGPA.parallel_IG(p,self.Results['T'],self.Results['W'],
-#                         self.Results['frog_in'], self.Results['Sfund'],
-#                         keep_fundspec=self.Args['fix_fund_spec'],max_population=Max_population,NStep=MNStep,
-#                         parallel=True)
-#             self.Results['gate']=np.copy(self.Results['pulse'])
-# #            plt.plot(np.abs(self.Results['pulse']))
-# #            plt.show()5
-# #            print(2)
-#             p.close()
-#             p.join()
+#discuntinued after one of the python updates, since it is being handeled automatically now
             pass
         else:
-            # print('multi')
             self.Results['pulse']=PCGPA.parallel_IG(None,self.Results['T'],self.Results['W'],
                         self.Results['frog_in'], self.Results['Sfund'],
                         keep_fundspec=self.Args['fix_fund_spec'],max_population=Max_population,NStep=MNStep,
@@ -839,6 +820,7 @@ class FROG_class(QtWidgets.QMainWindow):
     def closeEvent(self, event):
         self.fstop()
         event.accept()
+    
 
 
 def main():
@@ -850,4 +832,3 @@ def main():
 if __name__ == '__main__':
     main()
     gc.collect()
-
